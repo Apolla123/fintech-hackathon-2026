@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Система заявок</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #eef7fc; }
+        h1, h2 { color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        form { margin-bottom: 20px; }
+        input, textarea, select, button { margin: 5px; padding: 10px; font-size: 14px; }
+        button { background: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:hover { background: #45a049; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .status-new { color: #2196F3; font-weight: bold; }
+        .status-in_progress { color: #FF9800; font-weight: bold; }
+        .status-done { color: #4CAF50; font-weight: bold; }
+        .dashboard { display: flex; gap: 20px; margin-bottom: 20px; }
+        .stat-card { background: #2196F3; color: white; padding: 20px; border-radius: 8px; flex: 1; text-align: center; }
+        .stat-card h3 { margin: 0; font-size: 32px; }
+        .stat-card p { margin: 5px 0 0 0; }
+        .actions { display: flex; gap: 10px; align-items: center; }
+        .actions input { width: 150px; }
+        .actions select { width: 120px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Система заявок</h1>
+
+        <!-- Дашборд -->
+        <div class="dashboard" id="dashboard"></div>
+
+        <!-- Форма создания -->
+        <div class="card">
+            <h2>📝 Создать заявку</h2>
+            <form id="createForm">
+                <input type="text" id="title" placeholder="Название заявки" required style="width: 300px;"><br>
+                <textarea id="description" placeholder="Описание" required style="width: 300px; height: 80px;"></textarea><br>
+                <input type="text" id="creator" placeholder="Кто создаёт (ФИО)" required style="width: 300px;"><br>
+                <button type="submit">Создать заявку</button>
+            </form>
+        </div>
+
+        <!-- Таблица заявок -->
+        <div class="card">
+            <h2>📋 Все заявки</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Название</th>
+                        <th>Описание</th>
+                        <th>Создатель</th>
+                        <th>Статус</th>
+                        <th>Ответственный</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="requestsTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+
+        // Загрузка аналитики
+        async function loadAnalytics() {
+            const response = await fetch(`${API_URL}/analytics`);
+            const data = await response.json();
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = `
+                <div class="stat-card" style="background: #2196F3;">
+                    <h3>${data.total}</h3>
+                    <p>Всего заявок</p>
+                </div>
+                <div class="stat-card" style="background: #4CAF50;">
+                    <h3>${data.new}</h3>
+                    <p>Новые</p>
+                </div>
+                <div class="stat-card" style="background: #FF9800;">
+                    <h3>${data.in_progress}</h3>
+                    <p>В работе</p>
+                </div>
+                <div class="stat-card" style="background: #9C27B0;">
+                    <h3>${data.done}</h3>
+                    <p>Завершено</p>
+                </div>
+            `;
+        }
+
+        // Загрузка заявок
+        async function loadRequests() {
+            const response = await fetch(`${API_URL}/requests`);
+            const requests = await response.json();
+            const tbody = document.getElementById('requestsTable');
+            tbody.innerHTML = '';
+            requests.forEach(req => {
+                const statusClass = `status-${req.status}`;
+                const row = `
+                    <tr>
+                        <td>${req.id}</td>
+                        <td>${req.title}</td>
+                        <td>${req.description}</td>
+                        <td>${req.creator}</td>
+                        <td class="${statusClass}">${req.status}</td>
+                        <td>${req.assigned_to || '—'}</td>
+                        <td>
+                            <div class="actions">
+                                <input type="text" id="assign_${req.id}" placeholder="ФИО ответственного">
+                                <button onclick="assignRequest(${req.id})">Назначить</button>
+
+                                <select id="status_${req.id}">
+                                    <option value="new" ${req.status === 'new' ? 'selected' : ''}>Новая</option>
+                                    <option value="in_progress" ${req.status === 'in_progress' ? 'selected' : ''}>В работе</option>
+                                    <option value="done" ${req.status === 'done' ? 'selected' : ''}>Завершена</option>
+                                </select>
+                                <button onclick="updateStatus(${req.id})">Изменить статус</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Создание заявки
+        document.getElementById('createForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const creator = document.getElementById('creator').value;
+
+            await fetch(`${API_URL}/requests`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title, description, creator})
+            });
+
+            loadRequests();
+            loadAnalytics();
+            e.target.reset();
+        });
+
+        // Назначение ответственного
+        async function assignRequest(id) {
+            const assigned_to = document.getElementById(`assign_${id}`).value;
+            if (!assigned_to) {
+                alert('Введите ФИО ответственного');
+                return;
+            }
+            await fetch(`${API_URL}/requests/${id}/assign?assigned_to=${encodeURIComponent(assigned_to)}`, {
+                method: 'POST'
+            });
+            loadRequests();
+            loadAnalytics();
+        }
+
+        // Изменение статуса
+        async function updateStatus(id) {
+            const status = document.getElementById(`status_${id}`).value;
+            await fetch(`${API_URL}/requests/${id}/status`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status})
+            });
+            loadRequests();
+            loadAnalytics();
+        }
+
+        // Загрузить при старте
+        loadRequests();
+        loadAnalytics();
+    </script>
+</body>
+</html>
