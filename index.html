@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Заявки</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1f2430; --muted:#6b7280; --line:#e3e6ec;
+          --accent:#2f6fed; --warn:#d97706; --ok:#15803d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:12px 20px; }
+  h1 { font-size:18px; margin:0; }
+  main { max-width:960px; margin:20px auto; padding:0 16px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  input, select, textarea, button { font:inherit; padding:7px 10px; border:1px solid var(--line);
+           border-radius:8px; background:#fff; color:inherit; }
+  textarea { width:100%; min-height:70px; resize:vertical; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.ok { background:var(--ok); color:#fff; border-color:var(--ok); }
+  .tabs button { border-radius:8px 8px 0 0; border-bottom:none; }
+  .tabs button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; align-items:center; }
+  .toolbar label { color:var(--muted); font-size:13px; }
+  .req { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--line);
+         border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .req.unassigned { border-left-color:var(--warn); }
+  .req.assigned { border-left-color:var(--accent); }
+  .req.done { border-left-color:var(--ok); }
+  .req h3 { margin:0 0 4px; font-size:16px; }
+  .meta { color:var(--muted); font-size:13px; display:flex; flex-wrap:wrap; gap:4px 14px; }
+  .badge { display:inline-block; font-size:12px; padding:1px 8px; border-radius:99px; background:#fff3e0; color:var(--warn); }
+  .badge.a { background:#e8f0ff; color:var(--accent); }
+  .badge.d { background:#e6f4ea; color:var(--ok); }
+  .desc { margin:6px 0; white-space:pre-wrap; }
+  .actions { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .empty { text-align:center; color:var(--muted); padding:30px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header><h1>📋 Заявки — рабочая сторона</h1></header>
+<div id="conn" class="hidden" style="background:#fdecea;color:#b42318;padding:8px 20px;font-size:14px">
+  Нет связи с сервером. Проверьте, что app.py запущен — страница обновится сама.</div>
+
+<main>
+  <div class="tabs row" style="gap:4px">
+    <button id="tabActive" class="active">Заявки</button>
+    <button id="tabArchive">Архив</button>
+  </div>
+
+  <!-- Сортировка и фильтры -->
+  <div class="toolbar">
+    <label id="sortWrap">Сортировка:
+      <select id="sort">
+        <option value="unassigned">Сначала неназначенные</option>
+        <option value="assigned">Сначала назначенные</option>
+        <option value="assignee">По исполнителю (А–Я)</option>
+        <option value="date_desc">По дате: новые сверху</option>
+        <option value="date_asc">По дате: старые сверху</option>
+        <option value="client">По клиенту (А–Я)</option>
+        <option value="title">По названию (А–Я)</option>
+      </select>
+    </label>
+    <label id="filterWrap">Показать:
+      <select id="filter">
+        <option value="all">Все</option>
+        <option value="free">Только неназначенные</option>
+        <option value="taken">Только назначенные</option>
+      </select>
+    </label>
+    <input id="search" placeholder="Поиск…" style="flex:1;min-width:140px">
+    <span id="count" class="meta"></span>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let employees = [], active = [], archive = [], view = "active";
+
+const fmtDate = iso => new Date(iso).toLocaleString("ru-RU",
+  { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+
+function ago(iso) {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return "только что";
+  if (s < 3600) return Math.floor(s/60) + " мин назад";
+  if (s < 86400) return Math.floor(s/3600) + " ч назад";
+  const d = Math.floor(s/86400);
+  return d + " " + (d%10===1&&d%100!==11 ? "день" : (d%10>=2&&d%10<=4&&(d%100<10||d%100>=20) ? "дня" : "дней")) + " назад";
+}
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(url, method="GET", body) {
+  const r = await fetch(url, { method, headers:{"Content-Type":"application/json"},
+    body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "Ошибка");
+  return data;
+}
+
+// ---------- сортировка ----------
+const byDateDesc = (a,b) => new Date(b.created_at) - new Date(a.created_at);
+const byDateAsc  = (a,b) => new Date(a.created_at) - new Date(b.created_at);
+const sorters = {
+  // неназначенные сверху, внутри групп — старые заявки первыми (чтобы не залеживались)
+  unassigned: (a,b) => (!!a.assignee - !!b.assignee) || byDateAsc(a,b),
+  assigned:   (a,b) => (!!b.assignee - !!a.assignee) || byDateAsc(a,b),
+  assignee:   (a,b) => (a.assignee||"яяя").localeCompare(b.assignee||"яяя","ru") || byDateAsc(a,b),
+  date_desc:  byDateDesc,
+  date_asc:   byDateAsc,
+  client:     (a,b) => a.client.localeCompare(b.client,"ru") || byDateAsc(a,b),
+  title:      (a,b) => a.title.localeCompare(b.title,"ru"),
+};
+
+function visibleItems() {
+  let items = (view === "active" ? active : archive).slice();
+  if (view === "active") {
+    const f = $("filter").value;
+    if (f === "free")  items = items.filter(r => !r.assignee);
+    if (f === "taken") items = items.filter(r => r.assignee);
+  }
+  const q = $("search").value.trim().toLowerCase();
+  if (q) items = items.filter(r =>
+    [r.title, r.description, r.client, r.assignee].join(" ").toLowerCase().includes(q));
+  if (view === "archive") return items.sort((a,b) => new Date(b.completed_at) - new Date(a.completed_at));
+  return items.sort(sorters[$("sort").value]);
+}
+
+// ---------- отрисовка ----------
+function render() {
+  const arc = view === "archive";
+  $("filterWrap").classList.toggle("hidden", arc);
+  $("sortWrap").classList.toggle("hidden", arc);
+  $("tabActive").classList.toggle("active", !arc);
+  $("tabArchive").classList.toggle("active", arc);
+
+  const items = visibleItems();
+  $("count").textContent = "Найдено: " + items.length;
+  if (!items.length) {
+    $("list").innerHTML = '<div class="empty">' + (arc ? "Архив пуст" : "Заявок нет") + "</div>";
+    return;
+  }
+
+  $("list").innerHTML = items.map(r => {
+    const cls = arc ? "done" : (r.assignee ? "assigned" : "unassigned");
+    const badge = arc ? '<span class="badge d">Выполнена</span>'
+      : r.assignee ? `<span class="badge a">${esc(r.assignee)}</span>`
+      : '<span class="badge">Не назначена</span>';
+    let dates = `<span>📅 Выложена: ${fmtDate(r.created_at)} (${ago(r.created_at)})</span>`;
+    if (r.completed_at) dates += `<span>✅ Выполнена: ${fmtDate(r.completed_at)}</span>`;
+    if (r.restored_at)  dates += `<span>↩ Возвращена: ${fmtDate(r.restored_at)}</span>`;
+    if (arc && r.assignee) dates += `<span>Исполнитель: ${esc(r.assignee)}</span>`;
+
+    let actions;
+    if (arc) {
+      actions = `<div class="actions"><button data-restore="${r.id}">↩ Вернуть из архива</button></div>`;
+    } else {
+      // если исполнителя уже нет в списке сотрудников — всё равно показываем его
+      const names = r.assignee && !employees.includes(r.assignee) ? [r.assignee, ...employees] : employees;
+      const opts = ['<option value="">— не назначена —</option>']
+        .concat(names.map(e => `<option ${e===r.assignee?"selected":""}>${esc(e)}</option>`)).join("");
+      actions = `<div class="actions">
+        <select data-assign="${r.id}">${opts}</select>
+        <button class="ok" data-done="${r.id}">Выполнено → в архив</button></div>`;
+    }
+    return `<div class="req ${cls}">
+      <h3>${esc(r.title)} ${badge}</h3>
+      <div class="meta"><span>👤 ${esc(r.client)}</span>${dates}</div>
+      ${r.description ? `<div class="desc">${esc(r.description)}</div>` : ""}
+      ${actions}</div>`;
+  }).join("");
+}
+
+let lastSnapshot = "";
+async function refresh(force = true) {
+  try {
+    const [a, b] = await Promise.all([api("/api/requests"), api("/api/archive")]);
+    const snap = JSON.stringify([a, b]);
+    active = a; archive = b;
+    // при автообновлении не перерисовываем список, если данные не изменились
+    // (иначе закрывается открытый выпадающий список исполнителей)
+    if (force || snap !== lastSnapshot) render();
+    lastSnapshot = snap;
+    $("conn").classList.add("hidden");
+  } catch (e) {
+    $("conn").classList.remove("hidden");   // сервер недоступен
+  }
+}
+
+// выполнить действие; при ошибке показать сообщение и обновить список
+async function act(url, body) {
+  try { await api(url, "POST", body); }
+  catch (e) { alert(e.message); }
+  refresh();
+}
+
+// ---------- события ----------
+$("list").addEventListener("change", e => {
+  if (e.target.dataset.assign)
+    act(`/api/requests/${e.target.dataset.assign}/assign`, { assignee: e.target.value });
+});
+$("list").addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.done)         act(`/api/requests/${d.done}/complete`);
+  else if (d.restore) act(`/api/archive/${d.restore}/restore`);
+});
+
+$("tabActive").onclick  = () => { view = "active";  render(); };
+$("tabArchive").onclick = () => { view = "archive"; render(); };
+// выбранные сортировка и фильтр запоминаются в браузере
+for (const id of ["sort", "filter"]) {
+  try { const v = localStorage.getItem(id); if (v) $(id).value = v; } catch (e) {}
+}
+["sort","filter","search"].forEach(id => $(id).addEventListener("input", () => {
+  try { if (id !== "search") localStorage.setItem(id, $(id).value); } catch (e) {}
+  render();
+}));
+
+(async function init() {
+  try { employees = (await api("/api/config")).employees; } catch (e) {}
+  await refresh();
+  setInterval(() => refresh(false), 30000);   // автообновление раз в 30 секунд
+})();
+</script>
+</body>
+</html>
