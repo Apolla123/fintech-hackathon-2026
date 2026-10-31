@@ -1,180 +1,552 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Система заявок</title>
     <style>
-        body { font-family: Arial; margin: 20px; background: #eef7fc; }
-        h1, h2 { color: #333; }
-        .container { max-width: 1200px; margin: 0 auto; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 0; background: #eef7fc; color: #333; }
+        h1, h2 { color: #333; margin-top: 0; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         .card { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        form { margin-bottom: 20px; }
-        input, textarea, select, button { margin: 5px; padding: 10px; font-size: 14px; }
+        input, textarea, select, button { margin: 4px 0; padding: 9px 10px; font-size: 14px; font-family: inherit; border: 1px solid #ccc; border-radius: 6px; }
         button { background: #4CAF50; color: white; border: none; cursor: pointer; }
-        button:hover { background: #45a049; }
+        button:hover { filter: brightness(0.93); }
+        button.secondary { background: #e0e0e0; color: #333; }
+        button.danger { background: #e57373; }
+        button.blue { background: #2196F3; }
+        .hidden { display: none !important; }
+
+        /* Шапка */
+        .topbar { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .topbar .container { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; padding-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+        .topbar h1 { margin: 0; font-size: 22px; }
+        .user-chip { display: flex; align-items: center; gap: 10px; }
+        .role-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 13px; }
+        .role-guest { background: #78909C; }
+        .role-employee { background: #2196F3; }
+        .role-manager { background: #9C27B0; }
+
+        /* Экран входа */
+        .login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .login-box { background: white; border-radius: 12px; padding: 32px; width: 100%; max-width: 520px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); text-align: center; }
+        .login-box .big { font-size: 18px; padding: 14px 40px; }
+        .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+        .role-card { border: 2px solid #ddd; border-radius: 10px; padding: 16px 8px; cursor: pointer; background: white; color: #333; }
+        .role-card .icon { font-size: 32px; display: block; }
+        .role-card.selected { border-color: #4CAF50; background: #f1f9f1; }
+        .role-card small { color: #777; display: block; margin-top: 4px; }
+        .login-box input { width: 100%; }
+
+        /* Подсказка по правам */
+        .rights { background: #fffbe6; border-left: 4px solid #FFC107; padding: 12px 16px; border-radius: 6px; }
+        .rights ul { margin: 6px 0 0; padding-left: 20px; }
+
+        /* Статистика */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+        .stat-card { color: white; padding: 18px; border-radius: 8px; text-align: center; }
+        .stat-card h3 { margin: 0; font-size: 32px; }
+        .stat-card p { margin: 5px 0 0 0; }
+
+        /* Таблица */
+        .table-wrap { overflow-x: auto; }
         table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #4CAF50; color: white; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
+        th { background-color: #4CAF50; color: white; white-space: nowrap; }
         tr:nth-child(even) { background: #f9f9f9; }
+        tr.free td:first-child { border-left: 4px solid #2196F3; }
+        td[class^="status-"] { white-space: nowrap; }
         .status-new { color: #2196F3; font-weight: bold; }
         .status-in_progress { color: #FF9800; font-weight: bold; }
         .status-done { color: #4CAF50; font-weight: bold; }
-        .dashboard { display: flex; gap: 20px; margin-bottom: 20px; }
-        .stat-card { background: #2196F3; color: white; padding: 20px; border-radius: 8px; flex: 1; text-align: center; }
-        .stat-card h3 { margin: 0; font-size: 32px; }
-        .stat-card p { margin: 5px 0 0 0; }
-        .actions { display: flex; gap: 10px; align-items: center; }
+        .date { white-space: nowrap; }
+        .date small { color: #888; display: block; }
+        .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .actions input { width: 150px; }
-        .actions select { width: 120px; }
+        .muted { color: #999; }
+        .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+        .toolbar label { font-size: 14px; color: #555; }
+
+        /* Всплывающее сообщение */
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 20px; border-radius: 8px; z-index: 10; max-width: 90%; }
+        .toast.error { background: #d32f2f; }
+
+        @media (max-width: 600px) {
+            .roles { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Система заявок</h1>
 
-        <!-- Дашборд -->
-        <div class="dashboard" id="dashboard"></div>
+    <!-- ===================== ЭКРАН ВХОДА ===================== -->
+    <div id="loginScreen" class="login-screen hidden">
+        <div class="login-box">
+            <h1>Система заявок</h1>
 
-        <!-- Форма создания -->
-        <div class="card">
-            <h2>📝 Создать заявку</h2>
-            <form id="createForm">
-                <input type="text" id="title" placeholder="Название заявки" required style="width: 300px;"><br>
-                <textarea id="description" placeholder="Описание" required style="width: 300px; height: 80px;"></textarea><br>
-                <input type="text" id="creator" placeholder="Кто создаёт (ФИО)" required style="width: 300px;"><br>
-                <button type="submit">Создать заявку</button>
-            </form>
-        </div>
+            <!-- Шаг 1: просто кнопка «Зайти» -->
+            <div id="loginStep1">
+                <p>Добро пожаловать! Нажмите, чтобы войти.</p>
+                <button class="big" onclick="showLoginStep2()">Зайти</button>
+            </div>
 
-        <!-- Таблица заявок -->
-        <div class="card">
-            <h2>📋 Все заявки</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Название</th>
-                        <th>Описание</th>
-                        <th>Создатель</th>
-                        <th>Статус</th>
-                        <th>Ответственный</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody id="requestsTable"></tbody>
-            </table>
+            <!-- Шаг 2: выбор роли и имя -->
+            <div id="loginStep2" class="hidden">
+                <p>Кто вы?</p>
+                <div class="roles">
+                    <button type="button" class="role-card" data-role="guest" onclick="selectRole('guest')">
+                        <span class="icon">👤</span>Гость<small>создаёт заявки</small>
+                    </button>
+                    <button type="button" class="role-card" data-role="employee" onclick="selectRole('employee')">
+                        <span class="icon">🧑‍💼</span>Сотрудник<small>берёт заявки</small>
+                    </button>
+                    <button type="button" class="role-card" data-role="manager" onclick="selectRole('manager')">
+                        <span class="icon">👑</span>Руководитель<small>назначает</small>
+                    </button>
+                </div>
+                <form id="loginForm">
+                    <input type="text" id="loginName" placeholder="Ваше имя" required>
+                    <button type="submit" class="big" style="width: 100%; margin-top: 12px;">Войти</button>
+                </form>
+            </div>
         </div>
     </div>
+
+    <!-- ===================== ОСНОВНОЙ САЙТ ===================== -->
+    <div id="app" class="hidden">
+        <div class="topbar">
+            <div class="container">
+                <h1>📋 Система заявок</h1>
+                <div class="user-chip">
+                    <span id="userName"></span>
+                    <span id="userRole" class="role-badge"></span>
+                    <button class="secondary" onclick="logout()">Выйти</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <!-- Что может делать эта роль -->
+            <div class="rights" id="rightsBox"></div>
+
+            <!-- Статистика: только руководитель -->
+            <div class="card" id="statsCard">
+                <h2>📊 Статистика</h2>
+                <div class="dashboard" id="dashboard"></div>
+                <h3 style="margin-top: 20px;">По сотрудникам</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Сотрудник</th><th>В работе</th><th>Новые</th><th>Выполнено</th><th>Всего</th></tr></thead>
+                        <tbody id="employeeStats"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Форма создания: все роли -->
+            <div class="card">
+                <h2>📝 Создать заявку</h2>
+                <form id="createForm">
+                    <input type="text" id="title" placeholder="Название заявки" required style="width: 100%; max-width: 400px;"><br>
+                    <textarea id="description" placeholder="Описание" style="width: 100%; max-width: 400px; height: 80px;"></textarea><br>
+                    <button type="submit">Создать заявку</button>
+                </form>
+            </div>
+
+            <!-- Список заявок -->
+            <div class="card">
+                <h2 id="requestsTitle">📋 Заявки</h2>
+                <div class="toolbar">
+                    <label>Сортировка:
+                        <select id="sortSelect">
+                            <option value="free_first">Сначала свободные</option>
+                            <option value="assigned_first">Сначала назначенные</option>
+                            <option value="date_new">По дате: сначала новые</option>
+                            <option value="date_old">По дате: сначала старые</option>
+                            <option value="status">По статусу</option>
+                            <option value="assignee">По ответственному (А–Я)</option>
+                            <option value="title">По названию (А–Я)</option>
+                        </select>
+                    </label>
+                    <label>Статус:
+                        <select id="statusFilter">
+                            <option value="">Все</option>
+                            <option value="new">Новые</option>
+                            <option value="in_progress">В работе</option>
+                        </select>
+                    </label>
+                    <input type="search" id="searchInput" placeholder="Поиск по названию…">
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Описание</th>
+                                <th>Создатель</th>
+                                <th>Дата выкладки</th>
+                                <th>Статус</th>
+                                <th>Ответственный</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requestsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Архив -->
+            <div class="card">
+                <h2>🗄️ Архив (выполненные заявки)</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Создатель</th>
+                                <th>Дата выкладки</th>
+                                <th>Выполнена</th>
+                                <th>Ответственный</th>
+                                <th id="archiveActionsHead">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="archiveTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Список сотрудников для поля «Назначить» -->
+    <datalist id="employeesList"></datalist>
 
     <script>
         const API_URL = '';
 
-        // Загрузка аналитики
-        async function loadAnalytics() {
-            const response = await fetch(`${API_URL}/analytics`);
-            const data = await response.json();
-            const dashboard = document.getElementById('dashboard');
-            dashboard.innerHTML = `
-                <div class="stat-card" style="background: #2196F3;">
-                    <h3>${data.total}</h3>
-                    <p>Всего заявок</p>
-                </div>
-                <div class="stat-card" style="background: #4CAF50;">
-                    <h3>${data.new}</h3>
-                    <p>Новые</p>
-                </div>
-                <div class="stat-card" style="background: #FF9800;">
-                    <h3>${data.in_progress}</h3>
-                    <p>В работе</p>
-                </div>
-                <div class="stat-card" style="background: #9C27B0;">
-                    <h3>${data.done}</h3>
-                    <p>Завершено</p>
-                </div>
-            `;
+        const ROLE_TITLES = { guest: 'Гость', employee: 'Сотрудник', manager: 'Руководитель' };
+        const STATUS_TITLES = { new: 'Новая', in_progress: 'В работе', done: 'Выполнена' };
+        const RIGHTS = {
+            guest: ['Создавать заявки', 'Смотреть свои заявки и их статус'],
+            employee: ['Видеть свободные заявки и свои (чужие — нет)', 'Брать свободную заявку в работу', 'Менять статус своих заявок или отказаться от них', 'Создавать заявки'],
+            manager: ['Видеть все заявки и статистику', 'Назначать сотрудника на любую заявку', 'Менять статус любой заявки', 'Возвращать заявки из архива', 'Создавать заявки'],
+        };
+
+        let currentUser = null;   // { name, role }
+        let selectedRole = null;  // роль, выбранная на экране входа
+        let allRequests = [];     // заявки, которые пришли с сервера
+
+        // ---------- Помощники ----------
+
+        // Защита от «взлома» через текст: превращаем < > & " в безопасные символы
+        function esc(text) {
+            return String(text ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
         }
 
-        // Загрузка заявок
-        async function loadRequests() {
-            const response = await fetch(`${API_URL}/requests`);
-            const requests = await response.json();
-            const tbody = document.getElementById('requestsTable');
-            tbody.innerHTML = '';
-            requests.forEach(req => {
-                const statusClass = `status-${req.status}`;
-                const row = `
-                    <tr>
-                        <td>${req.id}</td>
-                        <td>${req.title}</td>
-                        <td>${req.description}</td>
-                        <td>${req.creator}</td>
-                        <td class="${statusClass}">${req.status}</td>
-                        <td>${req.assigned_to || '—'}</td>
-                        <td>
-                            <div class="actions">
-                                <input type="text" id="assign_${req.id}" placeholder="ФИО ответственного">
-                                <button onclick="assignRequest(${req.id})">Назначить</button>
+        function showToast(message, isError = false) {
+            const el = document.createElement('div');
+            el.className = 'toast' + (isError ? ' error' : '');
+            el.textContent = message;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
 
-                                <select id="status_${req.id}">
-                                    <option value="new" ${req.status === 'new' ? 'selected' : ''}>Новая</option>
-                                    <option value="in_progress" ${req.status === 'in_progress' ? 'selected' : ''}>В работе</option>
-                                    <option value="done" ${req.status === 'done' ? 'selected' : ''}>Завершена</option>
-                                </select>
-                                <button onclick="updateStatus(${req.id})">Изменить статус</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
+        // Красивая дата: «06 окт. 2026, 22:58» + «3 дня назад»
+        function formatDate(iso) {
+            if (!iso) return '<span class="muted">—</span>';
+            const d = new Date(iso);
+            const main = d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+            let ago = days <= 0 ? 'сегодня' : days === 1 ? 'вчера' : `${days} дн. назад`;
+            return `${esc(main)}<small>${ago}</small>`;
+        }
+
+        // Все запросы к серверу идут через эту функцию: она добавляет имя и роль
+        async function api(path, options = {}) {
+            const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+            if (currentUser) {
+                headers['X-User-Name'] = encodeURIComponent(currentUser.name);
+                headers['X-User-Role'] = currentUser.role;
+            }
+            const response = await fetch(API_URL + path, Object.assign({}, options, { headers }));
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.detail || 'Ошибка сервера');
+            }
+            return data;
+        }
+
+        // ---------- Вход / выход ----------
+
+        function showLoginStep2() {
+            document.getElementById('loginStep1').classList.add('hidden');
+            document.getElementById('loginStep2').classList.remove('hidden');
+        }
+
+        function selectRole(role) {
+            selectedRole = role;
+            document.querySelectorAll('.role-card').forEach(card => {
+                card.classList.toggle('selected', card.dataset.role === role);
             });
+            document.getElementById('loginName').focus();
         }
 
-        // Создание заявки
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!selectedRole) { showToast('Выберите, кто вы: гость, сотрудник или руководитель', true); return; }
+            const name = document.getElementById('loginName').value.trim();
+            try {
+                const user = await api('/login', { method: 'POST', body: JSON.stringify({ name, role: selectedRole }) });
+                currentUser = { name: user.name, role: user.role };
+                try { localStorage.setItem('user', JSON.stringify(currentUser)); } catch (err) {}
+                startApp();
+            } catch (err) {
+                showToast(err.message, true);
+            }
+        });
+
+        function logout() {
+            currentUser = null;
+            try { localStorage.removeItem('user'); } catch (err) {}
+            document.getElementById('app').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('loginStep1').classList.remove('hidden');
+            document.getElementById('loginStep2').classList.add('hidden');
+            document.getElementById('loginName').value = '';
+            selectRole(null);
+        }
+
+        // ---------- Запуск сайта для роли ----------
+
+        function startApp() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+
+            const role = currentUser.role;
+            document.getElementById('userName').textContent = currentUser.name;
+            const badge = document.getElementById('userRole');
+            badge.textContent = ROLE_TITLES[role];
+            badge.className = 'role-badge role-' + role;
+
+            document.getElementById('rightsBox').innerHTML =
+                `<b>Вы вошли как «${ROLE_TITLES[role]}». Вам доступно:</b><ul>${RIGHTS[role].map(r => `<li>${r}</li>`).join('')}</ul>`;
+
+            // Статистика видна только руководителю
+            document.getElementById('statsCard').classList.toggle('hidden', role !== 'manager');
+            document.getElementById('archiveActionsHead').classList.toggle('hidden', role !== 'manager');
+
+            const titles = { guest: '📋 Мои заявки', employee: '📋 Свободные и мои заявки', manager: '📋 Все заявки' };
+            document.getElementById('requestsTitle').textContent = titles[role];
+
+            refreshAll();
+        }
+
+        async function refreshAll() {
+            try {
+                const jobs = [loadRequests(), loadArchive()];
+                if (currentUser.role === 'manager') jobs.push(loadAnalytics(), loadEmployees());
+                await Promise.all(jobs);
+            } catch (err) {
+                showToast(err.message, true);
+            }
+        }
+
+        // ---------- Статистика (руководитель) ----------
+
+        async function loadAnalytics() {
+            const data = await api('/analytics');
+            document.getElementById('dashboard').innerHTML = `
+                <div class="stat-card" style="background: #2196F3;"><h3>${data.total}</h3><p>Всего заявок</p></div>
+                <div class="stat-card" style="background: #607D8B;"><h3>${data.unassigned}</h3><p>Без исполнителя</p></div>
+                <div class="stat-card" style="background: #03A9F4;"><h3>${data.new}</h3><p>Новые</p></div>
+                <div class="stat-card" style="background: #FF9800;"><h3>${data.in_progress}</h3><p>В работе</p></div>
+                <div class="stat-card" style="background: #9C27B0;"><h3>${data.done}</h3><p>Выполнено (архив)</p></div>
+            `;
+            document.getElementById('employeeStats').innerHTML = data.by_employee.length
+                ? data.by_employee.map(s => `<tr><td>${esc(s.name)}</td><td>${s.in_progress}</td><td>${s.new}</td><td>${s.done}</td><td><b>${s.in_progress + s.new + s.done}</b></td></tr>`).join('')
+                : '<tr><td colspan="5" class="muted">Пока никому ничего не назначено</td></tr>';
+        }
+
+        async function loadEmployees() {
+            const names = await api('/employees');
+            document.getElementById('employeesList').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+        }
+
+        // ---------- Заявки ----------
+
+        async function loadRequests() {
+            allRequests = await api('/requests');
+            renderRequests();
+        }
+
+        // Сортировка заявок
+        function sortRequests(list, mode) {
+            const isFree = r => !r.assigned_to;
+            const byDateNew = (a, b) => new Date(b.created_at) - new Date(a.created_at);
+            const statusOrder = { new: 0, in_progress: 1, done: 2 };
+            const copy = [...list];
+            switch (mode) {
+                case 'free_first':     // свободные сверху, внутри — свежие сверху
+                    return copy.sort((a, b) => (isFree(b) - isFree(a)) || byDateNew(a, b));
+                case 'assigned_first':
+                    return copy.sort((a, b) => (isFree(a) - isFree(b)) || byDateNew(a, b));
+                case 'date_new':
+                    return copy.sort(byDateNew);
+                case 'date_old':
+                    return copy.sort((a, b) => byDateNew(b, a));
+                case 'status':
+                    return copy.sort((a, b) => (statusOrder[a.status] - statusOrder[b.status]) || byDateNew(a, b));
+                case 'assignee':       // без ответственного — в конце
+                    return copy.sort((a, b) => (a.assigned_to || 'яяя').localeCompare(b.assigned_to || 'яяя', 'ru'));
+                case 'title':
+                    return copy.sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+                default:
+                    return copy;
+            }
+        }
+
+        function statusSelect(req) {
+            return `<select id="status_${req.id}">
+                ${['new', 'in_progress', 'done'].map(s => `<option value="${s}" ${req.status === s ? 'selected' : ''}>${STATUS_TITLES[s]}</option>`).join('')}
+            </select>
+            <button class="blue" onclick="updateStatus(${req.id})">Сохранить статус</button>`;
+        }
+
+        // Какие кнопки показать в строке — зависит от роли
+        function actionsFor(req) {
+            const role = currentUser.role;
+            if (role === 'guest') {
+                return '<span class="muted">—</span>';
+            }
+            if (role === 'employee') {
+                if (!req.assigned_to) {
+                    return `<button onclick="takeRequest(${req.id})">Взять в работу</button>`;
+                }
+                // значит заявка моя (чужие сервер вообще не присылает)
+                return `<div class="actions">${statusSelect(req)}
+                    <button class="danger" onclick="releaseRequest(${req.id})">Отказаться</button></div>`;
+            }
+            // руководитель
+            return `<div class="actions">
+                <input type="text" id="assign_${req.id}" list="employeesList" placeholder="Кого назначить">
+                <button onclick="assignRequest(${req.id})">Назначить</button>
+                ${statusSelect(req)}
+                ${req.assigned_to ? `<button class="danger" onclick="releaseRequest(${req.id})">Снять</button>` : ''}
+            </div>`;
+        }
+
+        function renderRequests() {
+            const mode = document.getElementById('sortSelect').value;
+            const status = document.getElementById('statusFilter').value;
+            const search = document.getElementById('searchInput').value.trim().toLowerCase();
+
+            let list = allRequests.filter(r =>
+                (!status || r.status === status) &&
+                (!search || r.title.toLowerCase().includes(search) || (r.description || '').toLowerCase().includes(search))
+            );
+            list = sortRequests(list, mode);
+
+            const tbody = document.getElementById('requestsTable');
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="muted">Заявок нет</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.map(req => `
+                <tr class="${req.assigned_to ? '' : 'free'}">
+                    <td>${req.id}</td>
+                    <td>${esc(req.title)}</td>
+                    <td>${esc(req.description)}</td>
+                    <td>${esc(req.creator)}</td>
+                    <td class="date">${formatDate(req.created_at)}</td>
+                    <td class="status-${esc(req.status)}">${STATUS_TITLES[req.status] || esc(req.status)}</td>
+                    <td>${req.assigned_to ? esc(req.assigned_to) : '<span class="muted">свободна</span>'}</td>
+                    <td>${actionsFor(req)}</td>
+                </tr>
+            `).join('');
+        }
+
+        document.getElementById('sortSelect').addEventListener('change', renderRequests);
+        document.getElementById('statusFilter').addEventListener('change', renderRequests);
+        document.getElementById('searchInput').addEventListener('input', renderRequests);
+
+        // ---------- Архив ----------
+
+        async function loadArchive() {
+            const list = await api('/archive');
+            list.sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
+            const isManager = currentUser.role === 'manager';
+            const tbody = document.getElementById('archiveTable');
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${isManager ? 7 : 6}" class="muted">В архиве пусто</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = list.map(req => `
+                <tr>
+                    <td>${req.id}</td>
+                    <td>${esc(req.title)}</td>
+                    <td>${esc(req.creator)}</td>
+                    <td class="date">${formatDate(req.created_at)}</td>
+                    <td class="date">${formatDate(req.completed_at)}</td>
+                    <td>${esc(req.assigned_to) || '<span class="muted">—</span>'}</td>
+                    ${isManager ? `<td><button class="blue" onclick="restoreRequest(${req.id})">↩ Вернуть из архива</button></td>` : ''}
+                </tr>
+            `).join('');
+        }
+
+        // ---------- Действия ----------
+
+        // Обёртка: выполнить действие, показать сообщение и обновить страницу
+        async function doAction(promise, okMessage) {
+            try {
+                await promise;
+                showToast(okMessage);
+            } catch (err) {
+                showToast(err.message, true);
+            }
+            refreshAll();
+        }
+
         document.getElementById('createForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const title = document.getElementById('title').value;
             const description = document.getElementById('description').value;
-            const creator = document.getElementById('creator').value;
-
-            await fetch(`${API_URL}/requests`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title, description, creator})
-            });
-
-            loadRequests();
-            loadAnalytics();
+            await doAction(api('/requests', { method: 'POST', body: JSON.stringify({ title, description }) }), 'Заявка создана');
             e.target.reset();
         });
 
-        // Назначение ответственного
-        async function assignRequest(id) {
-            const assigned_to = document.getElementById(`assign_${id}`).value;
-            if (!assigned_to) {
-                alert('Введите ФИО ответственного');
-                return;
-            }
-            await fetch(`${API_URL}/requests/${id}/assign?assigned_to=${encodeURIComponent(assigned_to)}`, {
-                method: 'POST'
-            });
-            loadRequests();
-            loadAnalytics();
+        function takeRequest(id) {
+            doAction(api(`/requests/${id}/take`, { method: 'POST' }), 'Заявка теперь ваша');
         }
 
-        // Изменение статуса
-        async function updateStatus(id) {
+        function releaseRequest(id) {
+            doAction(api(`/requests/${id}/release`, { method: 'POST' }), 'Заявка снова свободна');
+        }
+
+        function assignRequest(id) {
+            const name = document.getElementById(`assign_${id}`).value.trim();
+            if (!name) { showToast('Введите, кого назначить', true); return; }
+            doAction(api(`/requests/${id}/assign?assigned_to=${encodeURIComponent(name)}`, { method: 'POST' }), `Назначено: ${name}`);
+        }
+
+        function updateStatus(id) {
             const status = document.getElementById(`status_${id}`).value;
-            await fetch(`${API_URL}/requests/${id}/status`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({status})
-            });
-            loadRequests();
-            loadAnalytics();
+            const msg = status === 'done' ? 'Заявка выполнена и перенесена в архив' : 'Статус изменён';
+            doAction(api(`/requests/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }), msg);
         }
 
-        // Загрузить при старте
-        loadRequests();
-        loadAnalytics();
+        function restoreRequest(id) {
+            doAction(api(`/archive/${id}/restore`, { method: 'POST' }), 'Заявка возвращена из архива');
+        }
+
+        // ---------- Старт ----------
+        // Если пользователь уже входил раньше — сразу пускаем, иначе экран входа
+        try { currentUser = JSON.parse(localStorage.getItem('user')); } catch (err) { currentUser = null; }
+        if (currentUser && currentUser.name && ROLE_TITLES[currentUser.role]) {
+            startApp();
+        } else {
+            currentUser = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
     </script>
 </body>
 </html>
